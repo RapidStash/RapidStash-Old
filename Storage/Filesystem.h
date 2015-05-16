@@ -64,10 +64,11 @@ namespace Storage {
 		FSChunk(std::string);
 		~FSChunk() { shutdown(); }
 		void shutdown();
-		File *open(std::string);
+		File* open(std::string);
 		void loadMeta(uint64_t, FileMeta *);
-		File *find(std::string);
-		void createNewFile(std::string);
+		void saveMeta(uint64_t, FileMeta *);
+		File* find(std::string);
+		File* createNewFile(std::string);
 
 		/*
 		 *	Iterator over all files
