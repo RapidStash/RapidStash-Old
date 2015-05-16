@@ -28,10 +28,10 @@ namespace Storage {
 		const static uint64_t NAME_SIZE = 64;
 		const static uint64_t SIZE = (sizeof(uint64_t) * 3) + NAME_SIZE;
 
-		char name[NAME_SIZE];		// Name of the file
 		uint64_t size;				// File size in bytes
 		uint64_t position;			// Position in the file
 		uint64_t next;				// Next file index
+		char name[NAME_SIZE];		// Name of the file (Keep at end so we can do bulk reads)
 	};
 
 	class File {
@@ -62,11 +62,13 @@ namespace Storage {
 
 	public:
 		FSChunk(std::string);
+		~FSChunk() { shutdown(); }
 		void shutdown();
-		File *open(std::string);
+		File* open(std::string);
 		void loadMeta(uint64_t, FileMeta *);
-		File *find(std::string);
-		void createNewFile(std::string);
+		void saveMeta(uint64_t, FileMeta *);
+		File* find(std::string);
+		File* createNewFile(std::string);
 
 		/*
 		 *	Iterator over all files
@@ -102,6 +104,7 @@ namespace Storage {
 		// Initialize the file metadata list and initial space reserved for data.
 		void initFilesystem();
 		void loadMetaMetadata();
+		void writeMetaMetadata();
 
 		// Some constants for the iterator.
 		enum Position {
