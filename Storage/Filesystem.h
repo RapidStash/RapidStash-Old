@@ -1,4 +1,5 @@
 #pragma once
+
 #include <boost/iostreams/device/mapped_file.hpp>
 #include <boost/iostreams/stream.hpp>
 #include <boost/filesystem.hpp>
@@ -17,7 +18,7 @@ namespace Storage {
 
 	// Metadata about the metadata
 	struct MetaMetadata {
-		const static uint64_t SIZE = sizeof(uint64_t) * 3;
+		const static uint64_t SIZE = 3 * sizeof(uint64_t);
 		uint64_t firstFree;
 		uint64_t firstUsed;
 		uint64_t numFiles;
@@ -26,7 +27,7 @@ namespace Storage {
 	struct FileMeta {
 		// Constants
 		const static uint64_t NAME_SIZE = 64;
-		const static uint64_t SIZE = (sizeof(uint64_t) * 3) + NAME_SIZE;
+		const static uint64_t SIZE = (3 * sizeof(uint64_t)) + NAME_SIZE;
 
 		uint64_t size;				// File size in bytes
 		uint64_t position;			// Position in the file
@@ -41,15 +42,20 @@ namespace Storage {
 			initialized = false;
 		}
 		File(File &other) {
+			// Pointers
 			metadata = other.metadata;
 			container = other.container;
 			initialized = other.initialized;
 		}
+		~File() {
+			// TODO: delete metadata eventually
+		}
+
 		std::string getName();
 		uint64_t getSize();
 		uint64_t getPosition();
 	protected:
-		void init(FileMeta&, FSChunk*);
+		void init(FileMeta*, FSChunk*);
 	private:
 		FileMeta *metadata;
 		FSChunk *container;
@@ -57,6 +63,7 @@ namespace Storage {
 	};
 
 	class FSChunk {
+	protected:
 		friend class File;
 		class FileIterator; // Forward declaration
 
@@ -74,16 +81,16 @@ namespace Storage {
 		 *	Iterator over all files
 		 */
 		FileIterator begin() {
-			return _begin;
+			return FileIterator(BOTH, FIRST, this);
 		}
-		FileIterator end() {
+		const FileIterator& end() {
 			return _end;
 		}
 
 		/*
 		*	Iterator over free list
 		*/
-		FileIterator freeBegin() {
+		FileIterator& freeBegin() {
 			return FileIterator(FREE_LIST, FIRST, this);
 		}
 		FileIterator freeEnd() {
@@ -121,8 +128,30 @@ namespace Storage {
 		// Iterator for the file metadata list.
 		class FileIterator {
 		public:
-			FileIterator() {}
+			FileIterator() {
+				back = meta = new FileMeta;
+				
+				index = 1;
+				meta->next = 1;
+				meta->position = 0;
+				meta->size = 0;
+				std::memcpy(meta->name, "Hello!", 7);
+			}
+
+			FileIterator(const FileIterator& other) {
+				meta = new FileMeta;
+				back = meta;
+
+				type = other.type;
+				*meta = *other.meta;
+				*back = *other.back;
+				index = other.index;
+				fs = other.fs;
+			}
+
 			FileIterator(IteratorType t, Position p, FSChunk *fs_) : type(t), fs(fs_) {
+				meta = new FileMeta;
+				back = meta;
 				if (type == BOTH) {
 					if (p == FIRST) {
 						index = 1;
@@ -143,39 +172,61 @@ namespace Storage {
 					}
 				}
 				if (index > 0) {
-					fs->loadMeta(index, &meta);
+					fs->loadMeta(index, meta);
 				}
 			}
+
+			~FileIterator() {
+				delete meta;
+			}
+
 			FileIterator& operator++() {
-				if (index == 0) return *this;
+				if (index == 0) {
+					return *this;
+				}
+
 				if (type == BOTH) {
 					index++;
 				} else {
-					index = meta.next;
+					index = meta->next;
 				}
+
 				if (index > 0) {
-					fs->loadMeta(index, &meta);
+					fs->loadMeta(index, meta);
 				}
 				return *this;
 			}
-			bool operator==(FileIterator& other) {
+
+			bool operator==(const FileIterator& other) const {
 				return index == other.getIndex();
 			}
-			bool operator!=(FileIterator& other) {
+
+			bool operator!=(const FileIterator& other) const {
 				return index != other.getIndex();
 			}
-			File operator*() {
+
+			FileIterator& operator=(const FileIterator& other) {
+				type = other.type;
+				*meta = *other.meta;
+				index = other.index;
+				fs = other.fs;
+				return *this;
+			}
+
+			File operator*() const {
 				// Return the file meta at the current position.
 				File f;
+				assert(back == meta);
 				f.init(meta, fs);
 				return f;
 			}
-			uint64_t getIndex() {
+			uint64_t getIndex() const {
 				return index;
 			}
 		private:
 			IteratorType type;
-			FileMeta meta;
+			FileMeta* meta = NULL;
+			FileMeta* back = NULL;
 			uint64_t index;
 			FSChunk *fs;
 		};
@@ -187,7 +238,9 @@ namespace Storage {
 		std::string filename;
 		MetaMetadata metaMeta;
 
-		FileIterator _begin;
+		// ++ operator is desctructive, need new iterator each time begin is called
+		//FileIterator _begin;
+
 		FileIterator _end;
 
 		// Constants

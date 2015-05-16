@@ -8,7 +8,7 @@ int main(void) {
 		Storage::File &m = *it;
 		std::cout << "Name: " << m.getName() << std::endl;
 		std::cout << "Size: " << m.getSize() << std::endl;
-		std::cout << "Position: " << m.getPosition() << std::endl;
+		std::cout << "Position: " << m.getPosition() << std::endl << std::endl;
 	}
 	f.shutdown();
 	return 0;

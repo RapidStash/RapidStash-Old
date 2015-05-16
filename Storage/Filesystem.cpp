@@ -20,7 +20,7 @@ Storage::FSChunk::FSChunk(std::string fname_) : filename(fname_) {
 	fp = MAPPED_FILE(p);
 	stream.open(fp);
 
-	_begin = FileIterator(BOTH, FIRST, this);
+	//_begin = FileIterator(BOTH, FIRST, this);
 	_end = FileIterator(BOTH, LAST, this);
 
 	// If the file doesn't exist, create initial linked list of file metadata
@@ -38,74 +38,36 @@ Storage::FSChunk::FSChunk(std::string fname_) : filename(fname_) {
 
 void Storage::FSChunk::loadMetaMetadata() {
 	stream.seekg(0);
-	stream.read(reinterpret_cast<char*>(&metaMeta), FileMeta::SIZE);
-	/*
-	stream.read(reinterpret_cast<char*>(&(metaMeta.firstFree)), sizeof(uint64_t));
-	stream.read(reinterpret_cast<char*>(&(metaMeta.firstUsed)), sizeof(uint64_t));
-	stream.read(reinterpret_cast<char*>(&(metaMeta.numFiles)), sizeof(uint64_t));
-	*/
+	stream.read(reinterpret_cast<char*>(&metaMeta), sizeof(MetaMetadata));
 }
 
 void Storage::FSChunk::writeMetaMetadata() {
 	stream.seekp(0);
-	stream.write(reinterpret_cast<char*>(&metaMeta), FileMeta::SIZE);
+	stream.write(reinterpret_cast<char*>(&metaMeta), sizeof(MetaMetadata));
 }
 
 void Storage::FSChunk::initFilesystem() {
 	FileMeta meta;
-	//char name[FileMeta::NAME_SIZE];
-	memset(meta.name, '\0', FileMeta::NAME_SIZE);
-	meta.size = 0;
-	meta.position = 0;
-	meta.next = 2;
-	/* OLD
-	uint64_t size = 0;
-	uint64_t position = 0;
-	uint64_t offset = 0;	// This is not even used
-	uint64_t next = 2;
-	*/
 
+	// Init meta
+	memset(meta.name, '\0', FileMeta::NAME_SIZE);
+	meta.size = meta.position = 0;
+	meta.next = 2;
+	
 	// First write the meta metadata.
 	writeMetaMetadata();
-	/* 
-	stream.seekg(0); // Shouldn't this be seekp?
-	stream.write(reinterpret_cast<char*>(&(metaMeta.firstFree)), sizeof(uint64_t));
-	stream.write(reinterpret_cast<char*>(&(metaMeta.firstUsed)), sizeof(uint64_t));
-	stream.write(reinterpret_cast<char*>(&(metaMeta.numFiles)), sizeof(uint64_t));
-	*/
+	
 
 	// Copy in the first N-1 empty file metadata blocks.
 	for (uint64_t b = 0; b < NUM_FILES - 1; ++b, ++meta.next) {
-		
-		/* New */
 		stream.write(meta.name, FileMeta::NAME_SIZE);
 		stream.write(reinterpret_cast<char*>(&meta), 3 * sizeof(uint64_t));
-
-		/* OLD
-		stream.seekg(MetaMetadata::SIZE + ( b * FileMeta::SIZE )); // Do we have to do this?
-		stream.write(name, FileMeta::NAME_SIZE);
-		stream.write(reinterpret_cast<char*>(&size), sizeof(uint64_t));
-		stream.write(reinterpret_cast<char*>(&position), sizeof(uint64_t));
-		stream.write(reinterpret_cast<char*>(&next), sizeof(uint64_t));
-		*/
 	}
 
 	// Copy in the last block
-	/* New */
 	meta.next = 0;
 	stream.write(meta.name, FileMeta::NAME_SIZE);
 	stream.write(reinterpret_cast<char*>(&meta), 3 * sizeof(uint64_t));
-
-	/* OLD
-	
-	uint64_t b = NUM_FILES - 1;
-	next = 0;
-	stream.seekg(MetaMetadata::SIZE + ( b * FileMeta::SIZE ));
-	stream.write(name, FileMeta::NAME_SIZE);
-	stream.write(reinterpret_cast<char*>(&size), sizeof(uint64_t));
-	stream.write(reinterpret_cast<char*>(&position), sizeof(uint64_t));
-	stream.write(reinterpret_cast<char*>(&next), sizeof(uint64_t));
-	*/
 
 	// Flush it out to the file.
 	stream.flush();
@@ -122,10 +84,8 @@ Storage::File* Storage::FSChunk::find(std::string name) {
 }
 
 Storage::File* Storage::FSChunk::open(std::string name) {
-	// Open file
 	Storage::File *ret = find(name);
 	if (ret == NULL) {
-		// File not found.  Create it.
 		ret = createNewFile(name);
 	}
 	return ret;
@@ -161,19 +121,9 @@ void Storage::FSChunk::loadMeta(uint64_t pos, Storage::FileMeta *meta) {
 	// Copy the filename
 	stream.read(meta->name, FileMeta::NAME_SIZE);
 
-	/* New */
+	/* Read remaining */
 	stream.read(reinterpret_cast<char*>(meta), 3 * sizeof(uint64_t));
 
-	/* OLD 
-	// Copy the file size
-	stream.read(reinterpret_cast<char*>(&(meta->size)), sizeof(uint64_t));
-
-	// Copy the file position
-	stream.read(reinterpret_cast<char*>(&(meta->position)), sizeof(uint64_t));
-
-	// Copy the next file pointer
-	stream.read(reinterpret_cast<char*>(&(meta->next)), sizeof(uint64_t));
-	*/
 }
 
 void Storage::FSChunk::shutdown() {
@@ -188,19 +138,17 @@ void Storage::FSChunk::shutdown() {
 #pragma endregion
 
 #pragma region File Code
-void Storage::File::init(FileMeta &meta, Storage::FSChunk* container) {
-	metadata = new FileMeta();
-	memcpy(metadata, &meta, sizeof(FileMeta));
+void Storage::File::init(FileMeta* meta, Storage::FSChunk* container) {
+	metadata = new FileMeta();	// TODO: Memory leak
+	memcpy(metadata, meta, sizeof(FileMeta));
 	initialized = true;
 }
 
 std::string Storage::File::getName() {
-	// Get size of file
 	return metadata->name;
 }
 
 uint64_t Storage::File::getSize() {
-	// Get size of file
 	return metadata->size;
 }
 
@@ -212,6 +160,6 @@ uint64_t Storage::File::getPosition() {
 
 #pragma region Filesystem Code
 Storage::Filesystem::Filesystem() {
-	// Default constructor.
+	/* Empty */
 }
 #pragma endregion
