@@ -38,9 +38,17 @@ Storage::FSChunk::FSChunk(std::string fname_) : filename(fname_) {
 
 void Storage::FSChunk::loadMetaMetadata() {
 	stream.seekg(0);
+	stream.read(reinterpret_cast<char*>(&metaMeta), FileMeta::SIZE);
+	/*
 	stream.read(reinterpret_cast<char*>(&(metaMeta.firstFree)), sizeof(uint64_t));
 	stream.read(reinterpret_cast<char*>(&(metaMeta.firstUsed)), sizeof(uint64_t));
 	stream.read(reinterpret_cast<char*>(&(metaMeta.numFiles)), sizeof(uint64_t));
+	*/
+}
+
+void Storage::FSChunk::writeMetaMetadata() {
+	stream.seekg(0);
+	stream.write(reinterpret_cast<char*>(&metaMeta), FileMeta::SIZE);
 }
 
 void Storage::FSChunk::initFilesystem() {
@@ -52,10 +60,13 @@ void Storage::FSChunk::initFilesystem() {
 	uint64_t next = 2;
 
 	// First write the meta metadata.
+	writeMetaMetadata();
+	/* 
 	stream.seekg(0);
 	stream.write(reinterpret_cast<char*>(&(metaMeta.firstFree)), sizeof(uint64_t));
 	stream.write(reinterpret_cast<char*>(&(metaMeta.firstUsed)), sizeof(uint64_t));
 	stream.write(reinterpret_cast<char*>(&(metaMeta.numFiles)), sizeof(uint64_t));
+	*/
 
 	// Copy in the first N-1 empty file metadata blocks.
 	for (uint64_t b = 0; b < NUM_FILES - 1; ++b, ++next) {
@@ -113,6 +124,8 @@ void Storage::FSChunk::loadMeta(uint64_t pos, Storage::FileMeta *meta) {
 	// Copy the filename
 	stream.read(meta->name, FileMeta::NAME_SIZE);
 
+	stream.read(reinterpret_cast<char*>(meta), FileMeta::SIZE);
+	/*
 	// Copy the file size
 	stream.read(reinterpret_cast<char*>(&(meta->size)), sizeof(uint64_t));
 
@@ -121,12 +134,17 @@ void Storage::FSChunk::loadMeta(uint64_t pos, Storage::FileMeta *meta) {
 
 	// Copy the next file pointer
 	stream.read(reinterpret_cast<char*>(&(meta->next)), sizeof(uint64_t));
+	*/
 }
 
 void Storage::FSChunk::shutdown() {
-	stream.flush();
-	stream.close();
-	fp.close();
+	static bool beenHere = false;
+	if (!beenHere) { // Imagine if we did this twice
+		stream.flush();
+		stream.close();
+		fp.close();
+		beenHere = true;
+	}
 }
 #pragma endregion
 
@@ -136,14 +154,17 @@ void Storage::File::init(FileMeta &meta, Storage::FSChunk* container) {
 	memcpy(metadata, &meta, sizeof(FileMeta));
 	initialized = true;
 }
+
 std::string Storage::File::getName() {
 	// Get size of file
 	return metadata->name;
 }
+
 uint64_t Storage::File::getSize() {
 	// Get size of file
 	return metadata->size;
 }
+
 uint64_t Storage::File::getPosition() {
 	// Get the position of the file in the filsystem chunk
 	return metadata->position;
